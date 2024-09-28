@@ -14,6 +14,7 @@ load_dotenv()
 #@traceable
 @observe
 def get_now_playing_movies():
+    print("get_now_playing_movies() called")
     url = "https://api.themoviedb.org/3/movie/now_playing?language=en-US&page=1"
     headers = {
         "Authorization": f"Bearer {os.getenv('TMDB_API_ACCESS_TOKEN')}"
@@ -49,6 +50,7 @@ def get_now_playing_movies():
 
 @observe
 def get_showtimes(title, location):
+    print("get_showtimes() called")
     params = {
         "api_key": os.getenv('SERP_API_KEY'),
         "engine": "google",
@@ -87,11 +89,13 @@ def get_showtimes(title, location):
 
 @observe
 def buy_ticket(theater, movie, showtime):
+    print("buy_ticket() called")
     return f"Ticket purchased for {movie} at {theater} for {showtime}."
 
 
 @observe
 def get_reviews(movie_id):
+    print("get_reviews() called")
     url = f"https://api.themoviedb.org/3/movie/{movie_id}/reviews?language=en-US&page=1"
     headers = {
         "accept": "application/json",

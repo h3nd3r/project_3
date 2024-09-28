@@ -92,30 +92,19 @@ async def on_message(message: cl.Message):
                 theater = json_message.get("theater")
                 movie = json_message.get("movie")
                 showtime = json_message.get("showtime")
-                #message_history.append({"role": "system", "content": "Confirm ticket purchase for " + movie + " at " + showtime + " at " + theater + " ?"})
                 result = buy_ticket(theater, movie, showtime)
             elif function_name == "confirm_ticket_purchase":
                 theater = json_message.get("theater")
                 movie = json_message.get("movie")
                 showtime = json_message.get("showtime")
-
-
-                #result = confirm_ticket_purchase(theater, movie, showtime)
             else:
                 result = "Unknown result"
                 
             message_history.append({"role": "system", "content": result})
-            
-            # print("result:", result)
             response_message = await generate_response(client, message_history, gen_kwargs)
             
             print("response_message: \"", response_message.content, "\"")
 
-            # title = json_message.get("title")
-            # location = json_message.get("location") 
-            # showtimes = get_showtimes(title, location)
-            # message_history.append({"role": "assistant", "content": showtimes})
-            # response_message = await generate_response(client, message_history, gen_kwargs)
         except json.JSONDecodeError:
             print("Error: Unable to parse the message as JSON")
             json_message = None
