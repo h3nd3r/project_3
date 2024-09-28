@@ -1,18 +1,28 @@
+import sys
+sys.path.append('/Users/sarahender/Development/llm_bootcamp/project_3/.venv/lib/python3.12/site-packages')
+
 import os
 import requests
-import serpapi
-import os
-from langsmith import traceable
+from serpapi import GoogleSearch
+#from langsmith import traceable
+from langfuse.decorators import observe
+from langfuse.openai import AsyncOpenAI
+from dotenv import load_dotenv
 
-@traceable
+load_dotenv()
+
+#@traceable
+@observe
 def get_now_playing_movies():
     url = "https://api.themoviedb.org/3/movie/now_playing?language=en-US&page=1"
     headers = {
         "Authorization": f"Bearer {os.getenv('TMDB_API_ACCESS_TOKEN')}"
     }
+    print(headers)
     response = requests.get(url, headers=headers)
     
     if response.status_code != 200:
+        print(f"Error fetching data: {response.status_code} - {response.reason}")
         return f"Error fetching data: {response.status_code} - {response.reason}"
     
     data = response.json()
@@ -37,7 +47,7 @@ def get_now_playing_movies():
 
     return formatted_movies
 
-@traceable
+@observe
 def get_showtimes(title, location):
     params = {
         "api_key": os.getenv('SERP_API_KEY'),
@@ -49,10 +59,11 @@ def get_showtimes(title, location):
         "hl": "en"
     }
 
-    search = serpapi.search(params)
+    search = GoogleSearch(params)
     results = search.get_dict()
-
+    print(f"Google search results: {results}")
     if 'showtimes' not in results:
+        print(f"No showtimes found for {title} in {location}.")
         return f"No showtimes found for {title} in {location}."
 
     showtimes = results['showtimes'][0]
@@ -71,15 +82,15 @@ def get_showtimes(title, location):
                 formatted_showtimes += f"    - {time}\n"
 
     formatted_showtimes += "\n"
-
+    print("formatted_showtimes: \"", formatted_showtimes, "\"")
     return formatted_showtimes
 
-@traceable
+@observe
 def buy_ticket(theater, movie, showtime):
     return f"Ticket purchased for {movie} at {theater} for {showtime}."
 
 
-@traceable
+@observe
 def get_reviews(movie_id):
     url = f"https://api.themoviedb.org/3/movie/{movie_id}/reviews?language=en-US&page=1"
     headers = {

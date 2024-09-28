@@ -1,45 +1,21 @@
 from dotenv import load_dotenv
 import chainlit as cl
-from movie_functions import get_showtimes, get_now_playing_movies, get_reviews
+from movie_functions import get_showtimes, get_now_playing_movies, get_reviews, buy_ticket
 import re
 import json
-
+import openai
+from langfuse.decorators import observe
+from langfuse.openai import AsyncOpenAI
 
 load_dotenv()
 
-# Note: If switching to LangSmith, uncomment the following, and replace @observe with @traceable
-from langsmith.wrappers import wrap_openai
-from langsmith import traceable
-import openai
-client = wrap_openai(openai.AsyncClient())
-
-# from langfuse.decorators import observe
-# from langfuse.openai import AsyncOpenAI
- 
-# client = AsyncOpenAI()
+client = AsyncOpenAI()
 
 gen_kwargs = {
     "model": "gpt-4o",
     "temperature": 0.2,
     "max_tokens": 500
 }
-
-# SYSTEM_PROMPT = """\
-# You are a helpful assistant.
-
-# If you have the information in the context use it to reply.
-
-# otherwise if asked about showtimes reply with the movie title and location formatted as follows:
-# { "function": "get_showtimes", "title": "movieTitle", "location": "city, state"}
-
-# if asked about current movies playing, you will create a message formatted as 
-# { "function": "get_now_playing_movies"}
-
-# and if asked about the reviews for a movie, you will create a message formatted as
-# { "function": "get_reviews", "movie_id": "movieId" }
-
-
-# """
 
 SYSTEM_PROMPT = """\
 You are a helpful movie chatbot that helps people explore movies that are out in \
@@ -48,23 +24,30 @@ the system add to the context. If you need to call a function, only output the \
 function call. Call functions using Python syntax in plain text, no code blocks.
 
 You have access to the following functions, generate function calls in the following format:
-{ "function": "get_showtimes", "title": "movieTitle", "location": "city, state"}
+# get the available showtimes for a movie in a zipcode
+{ "function": "get_showtimes", "title": "movieTitle", "location": "zipcode"}
 
+# get the list of movies currently playing
 { "function": "get_now_playing_movies"}
 
+# get the reviews for a movie
 { "function": "get_reviews", "movie_id": "movieId" }
+
+# initiate a ticket purchase, confirm the ticket purchase with the user before finalizing by calling the confirm_ticket_purchase function
+{ "function": "buy_ticket", "theater": "theaterName", "movie": "movieTitle", "showtime": "showtime" }
+
+# confirm a ticket purchase
+{ "function": "confirm_ticket_purchase", "theater": "theaterName", "movie": "movieTitle", "showtime": "showtime" }
+
 """
 
-
-# @observe
-@traceable
+@observe
 @cl.on_chat_start
 def on_chat_start():    
     message_history = [{"role": "system", "content": SYSTEM_PROMPT}]
     cl.user_session.set("message_history", message_history)
 
-# @observe
-@traceable
+@observe
 async def generate_response(client, message_history, gen_kwargs):
     response_message = cl.Message(content="")
     await response_message.send()
@@ -79,18 +62,18 @@ async def generate_response(client, message_history, gen_kwargs):
     return response_message
 
 @cl.on_message
-#@observe
-@traceable
+@observe
 async def on_message(message: cl.Message):
+
     message_history = cl.user_session.get("message_history", [])
     message_history.append({"role": "user", "content": message.content})
 
     response_message = await generate_response(client, message_history, gen_kwargs)
 
-    if response_message.content.startswith("{ \"function\": "):
-        print("Function call detected")
-        
+    while response_message.content.startswith("{ \"function\": "):
 
+        print("Function call detected with response_message: \"", response_message.content, "\"")
+        
         try:
             json_message = json.loads(response_message.content)
         
@@ -105,14 +88,28 @@ async def on_message(message: cl.Message):
             elif function_name == "get_reviews":
                 movie_id = json_message.get("movie_id")
                 result = get_reviews(movie_id)
+            elif function_name == "buy_ticket":
+                theater = json_message.get("theater")
+                movie = json_message.get("movie")
+                showtime = json_message.get("showtime")
+                #message_history.append({"role": "system", "content": "Confirm ticket purchase for " + movie + " at " + showtime + " at " + theater + " ?"})
+                result = buy_ticket(theater, movie, showtime)
+            elif function_name == "confirm_ticket_purchase":
+                theater = json_message.get("theater")
+                movie = json_message.get("movie")
+                showtime = json_message.get("showtime")
+
+
+                #result = confirm_ticket_purchase(theater, movie, showtime)
             else:
-                result = "Unknown function call"
+                result = "Unknown result"
                 
             message_history.append({"role": "system", "content": result})
             
             # print("result:", result)
             response_message = await generate_response(client, message_history, gen_kwargs)
             
+            print("response_message: \"", response_message.content, "\"")
 
             # title = json_message.get("title")
             # location = json_message.get("location") 
@@ -122,11 +119,10 @@ async def on_message(message: cl.Message):
         except json.JSONDecodeError:
             print("Error: Unable to parse the message as JSON")
             json_message = None
-    
-    message_history.append({"role": "assistant", "content": response_message.content})
+        
+        message_history.append({"role": "assistant", "content": response_message.content})
 
-
-    cl.user_session.set("message_history", message_history)
+        cl.user_session.set("message_history", message_history)
 
 if __name__ == "__main__":
     cl.main()
